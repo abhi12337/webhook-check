@@ -19,6 +19,10 @@ All notable changes to this project are documented here. The format follows
   (`db.markPaid(...)`, `this.orders.fulfillOrder(...)`, `db.mark_paid(...)`) while the same call
   without a receiver (`markPaid(...)`) was counted, so Express handlers were judged differently
   from Next.js / FastAPI ones. Both forms now count as writes in every framework.
+- A Python file with a syntax error was skipped silently. It is now reported: a
+  `warning: <path>: syntax error line N; file not scanned` line on stderr, a count in the text
+  header and a `"skipped": [{"path": ..., "reason": ...}]` list in the JSON report. The exit code
+  still depends on findings only.
 
 ## [0.1.0] - 2026-11-11
 

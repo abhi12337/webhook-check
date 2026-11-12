@@ -103,9 +103,15 @@ def cmd_scan(args) -> int:
             for item in [*r.findings, *r.handlers]:
                 if item.file and label != ".":
                     item.file = f"{label.rstrip('/').rstrip(chr(92))}/{item.file}".replace("\\", "/")
+            for x in r.skipped:
+                if label != ".":
+                    x["path"] = f"{label.rstrip('/').rstrip(chr(92))}/{x['path']}".replace("\\", "/")
     disabled = {r.upper() for r in args.disable}
     findings = [f for r in results for f in r.findings if f.rule_id not in disabled]
     exit_code = _exit_code(findings, args.fail_on)
+    skipped = [x for r in results for x in r.skipped]
+    for x in skipped:
+        print(f"warning: {x['path']}: {x['reason']}; file not scanned", file=sys.stderr)
     shown = _filter_min(findings, args.min_severity)
     files = sum(r.files_scanned for r in results)
     summary, extra = _handler_summary(results)
@@ -113,10 +119,13 @@ def cmd_scan(args) -> int:
         sys.stdout.write(render_json(shown, meta={
             "targets": [r.root for r in results], "files_scanned": files,
             "handlers": [h.to_dict() for r in results for h in r.handlers],
+            "skipped": skipped,
             "exit_code": exit_code,
         }))
     else:
         header = [f"Scanned {', '.join(paths)}", f"{files} source file(s), {summary}", *extra]
+        if skipped:
+            header.append(f"{len(skipped)} file(s) could not be parsed and were not scanned (see warnings)")
         sys.stdout.write(render_text(shown, header=header, color=use_color(force=False if args.no_color else None),
                                      verbose_fix=not args.brief, footer=[f"Exit code: {exit_code}"]))
     return exit_code

@@ -194,3 +194,13 @@ def test_readme_examples_match_real_output(tmp_path, monkeypatch, capsys):
     _, out, _ = run(capsys, "scan", "tests/fixtures/node_clean", "tests/fixtures/py_clean", "--no-color")
     assert out.strip() in readme
     assert not re.search(r"whsec_[A-Za-z0-9]{8}", readme)
+
+
+def test_unparseable_python_file_is_warned_not_silently_clean(capsys, tmp_path):
+    (tmp_path / "hooks.py").write_text('@app.post("/webhooks/stripe")\ndef hook(request):\n    x = = 1\n')
+    code, out, err = run(capsys, "scan", str(tmp_path), "--no-color")
+    assert code == 0                                  # exit code still depends on findings only
+    assert "warning: hooks.py: syntax error line 3; file not scanned" in err
+    assert "1 file(s) could not be parsed" in out
+    code, out, _ = run(capsys, "scan", str(tmp_path), "--json")
+    assert json.loads(out)["skipped"] == [{"path": "hooks.py", "reason": "syntax error line 3"}]

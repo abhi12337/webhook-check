@@ -31,6 +31,7 @@ class ScanResult:
     findings: list[Finding] = field(default_factory=list)
     handlers: list[Handler] = field(default_factory=list)
     files_scanned: int = 0
+    skipped: list[dict] = field(default_factory=list)   # [{"path": ..., "reason": "syntax error line 3"}]
 
 
 def _is_test_file(name: str) -> bool:
@@ -62,7 +63,10 @@ def scan_file(path: Path, rel: str, res: ScanResult, max_bytes: int) -> None:
     res.files_scanned += 1
     if not is_relevant(text, rel):
         return
-    findings, handlers = (scan_python if suffix in PY_EXT else scan_js)(rel, text)
+    if suffix in PY_EXT:
+        findings, handlers = scan_python(rel, text, res.skipped)   # unparseable files are reported, not dropped
+    else:
+        findings, handlers = scan_js(rel, text)
     lines = text.splitlines()
     for f in findings:
         raw = lines[f.line - 1] if f.line and 0 < f.line <= len(lines) else ""

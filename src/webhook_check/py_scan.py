@@ -586,10 +586,22 @@ def check_tolerance(pf: PyFile) -> None:
                f"after it was sent.", t.lineno)
 
 
-def scan_python(rel: str, text: str) -> tuple[list[Finding], list[Handler]]:
+def parse_failure(exc: BaseException) -> str:
+    if isinstance(exc, SyntaxError):
+        return f"syntax error line {exc.lineno}" if exc.lineno else "syntax error"
+    if isinstance(exc, RecursionError):
+        return "too deeply nested to parse"
+    return f"could not be parsed ({exc})"
+
+
+def scan_python(rel: str, text: str, skipped: list[dict] | None = None) -> tuple[list[Finding], list[Handler]]:
+    """Findings and handlers for one file. A file `ast` cannot parse yields nothing and, when
+    `skipped` is given, is appended to it as {"path", "reason"} so it can be reported."""
     try:
         tree = ast.parse(text)
-    except (SyntaxError, ValueError):
+    except (SyntaxError, ValueError, RecursionError) as e:
+        if skipped is not None:
+            skipped.append({"path": rel, "reason": parse_failure(e)})
         return [], []
     pf = PyFile(rel, text, tree)
     check_secrets(pf)

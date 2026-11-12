@@ -711,6 +711,11 @@ report as an artifact.
 `signature_verified` is `true`, `false`, or `null` when the handler sits behind middleware or
 decorators the tool cannot see into.
 
+The JSON report also has `"skipped"`: Python files that could not be parsed (`{"path": ...,
+"reason": "syntax error line 12"}`). Such files are never treated as clean: each is also
+reported on stderr (`warning: api/hooks.py: syntax error line 12; file not scanned`) and counted
+in the text header. They do not change the exit code.
+
 ## Development
 
 ```bash
