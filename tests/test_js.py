@@ -399,3 +399,86 @@ def test_request_passed_to_imported_handler_is_not_guessed():
     src = ('import { handleWebhook } from "../lib/webhooks";\n'
            'export async function POST(req: Request) {\n  return handleWebhook(req);\n}\n')
     assert js('import Stripe from "stripe";\n' + src, "app/api/webhooks/stripe/route.ts") == ([], [])
+
+
+# ---------------------------------------------------------------- 0.1.1 regressions
+def test_no_sdk_fixture_route_path_names_the_provider():
+    """A handler that never imports the Stripe SDK is still found from its route path."""
+    res = scan_path(str(FIX / "node_no_sdk"))
+    got = sorted((f.rule_id, f.file, f.line, f.severity) for f in res.findings)
+    assert got == [("WHK001", "app/api/webhooks/stripe/route.ts", 5, "critical"),
+                   ("WHK007", "app/api/webhooks/stripe/route.ts", 5, "low")]
+    by_label = {h.label: h for h in res.handlers}
+    assert by_label["POST /api/webhooks/stripe"].provider == "stripe"
+    assert by_label["POST /api/webhooks/stripe"].verified is False
+    # manual HMAC of the raw body + Stripe-Signature header counts as verification
+    assert by_label["POST /api/stripe/webhook"].verified is True
+    # creating a checkout session is not a webhook
+    assert "POST /api/stripe/checkout" not in by_label
+
+
+NO_SDK = ('export async function POST(req: Request) {\n  const event = await req.json();\n'
+          '  if (event.type === "checkout.session.completed") await markPaid(event.data.object.id);\n'
+          '  return new Response("ok");\n}\n')
+
+
+def test_no_sdk_handler_needs_no_provider_word_in_the_code(make_repo):
+    root = make_repo({"app/api/webhooks/stripe/route.ts": NO_SDK})
+    assert [(f.rule_id, f.extra["provider"]) for f in scan_path(str(root)).findings
+            if f.rule_id == "WHK001"] == [("WHK001", "stripe")]
+
+
+@pytest.mark.parametrize("rel,provider", [
+    ("app/api/stripe/route.ts", "stripe"),        # provider in the path + its event types
+    ("app/api/webhooks/route.ts", "stripe"),      # generic webhook path + one provider's event types
+    ("app/api/orders/route.ts", None),            # event types alone, on a non-webhook path: not enough
+])
+def test_no_sdk_event_types_and_path(rel, provider):
+    assert [h.provider for h in js(NO_SDK, rel)[1]] == ([provider] if provider else [])
+
+
+def test_no_sdk_checkout_route_is_not_a_webhook():
+    src = ('export async function POST(req: Request) {\n  const { priceId } = await req.json();\n'
+           '  const session = await createSession(priceId);\n  return Response.json({ url: session.url });\n}\n')
+    assert js(src, "app/api/stripe/checkout/route.ts") == ([], [])
+
+
+def test_no_sdk_manual_hmac_is_verified(make_repo):
+    good = ('import crypto from "crypto";\nexport async function POST(req: Request) {\n'
+            '  const raw = await req.text();\n'
+            '  const mac = crypto.createHmac("sha256", process.env.STRIPE_WEBHOOK_SECRET!).update(raw).digest("hex");\n'
+            '  if (!crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(req.headers.get("x-sig") ?? ""))) {\n'
+            '    return new Response("bad", { status: 400 });\n  }\n'
+            '  const event = JSON.parse(raw);\n'
+            '  if (event.type === "checkout.session.completed") await markPaid(event.data.object.id);\n'
+            '  return new Response("ok");\n}\n')
+    root = make_repo({"app/api/webhooks/stripe/route.ts": good})
+    res = scan_path(str(root))
+    assert "WHK001" not in rules(res.findings)
+    assert [h.verified for h in res.handlers] == [True]
+
+
+@pytest.mark.parametrize("call", ["db.markPaid(event.data.object.id)", "markPaid(event.data.object.id)",
+                                  "this.orders.fulfillOrder(event.data.object.id)",
+                                  "orders.grantAccess(event.data.object.customer)"])
+def test_whk007_write_heuristic_same_for_method_and_function_calls(call):
+    express = ('import express from "express";\nconst app = express();\n'
+               'app.post("/webhooks/stripe", express.raw({ type: "application/json" }), async (req, res) => {\n'
+               '  const event = stripe.webhooks.constructEvent(req.body, req.headers["stripe-signature"], secret);\n'
+               f'  if (event.type === "checkout.session.completed") await {call};\n'
+               '  res.sendStatus(200);\n});\n')
+    assert rules(js(express)[0]) == ["WHK007"]
+    nxt = ('import Stripe from "stripe";\nexport async function POST(req: Request) {\n'
+           '  const event = await stripe.webhooks.constructEventAsync(await req.text(), '
+           'req.headers.get("stripe-signature")!, secret);\n'
+           f'  if (event.type === "checkout.session.completed") await {call};\n'
+           '  return new Response("ok");\n}\n')
+    assert rules(js(nxt, "app/api/webhooks/stripe/route.ts")[0]) == ["WHK007"]
+
+
+def test_whk007_responses_are_not_writes():
+    src = ('import express from "express";\nconst app = express();\n'
+           'app.post("/webhooks/stripe", express.raw({ type: "application/json" }), async (req, res) => {\n'
+           '  const event = stripe.webhooks.constructEvent(req.body, req.headers["stripe-signature"], secret);\n'
+           '  console.log(event.type);\n  res.status(200).send("ok");\n});\n')
+    assert js(src)[0] == []

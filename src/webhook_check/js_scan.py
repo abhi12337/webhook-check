@@ -898,8 +898,10 @@ def check_tolerance(jf: JsFile) -> None:
 
 
 # ---------------------------------------------------------------- entry point
-def is_relevant(text: str) -> bool:
-    return bool(RELEVANT_RE.search(text))
+def is_relevant(text: str, rel: str = "") -> bool:
+    """Worth scanning: the code or its path mentions webhooks / a provider (app/api/webhooks/stripe/route.ts
+    may never name Stripe in the code itself)."""
+    return bool(RELEVANT_RE.search(text) or RELEVANT_RE.search(rel))
 
 
 def scan_js(rel: str, text: str) -> tuple[list[Finding], list[Handler]]:

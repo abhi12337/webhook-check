@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "webhook-check"
-version = "0.1.0"
+version = "0.1.1"
 description = "Static check that webhook handlers (Stripe, Razorpay, GitHub, Clerk/Svix, Shopify, Paddle, Lemon Squeezy, Twilio, PayPal) verify signatures on the raw body and handle events safely, in Node/TypeScript and Python."
 readme = "README.md"
 requires-python = ">=3.10"

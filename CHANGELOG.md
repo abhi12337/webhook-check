@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-11-12
+
+### Fixed
+
+- A webhook route that never imports the provider's SDK and never names the provider in its
+  code (for example `app/api/webhooks/stripe/route.ts` exporting `POST` that reads
+  `event.type` from `await req.json()`) was skipped entirely, so WHK001 was not reported. Files
+  are now selected by their path as well as their contents, and the provider is inferred from
+  the route path (`/webhooks/stripe`), from its event types plus its name in the path, or from
+  one provider's event types on a webhook path (`/api/webhooks`). Manual HMAC verification of
+  the raw body still counts as verified, and `/api/stripe/checkout` is still not a webhook.
+- WHK007 missed state changes made through a method call with a verb-style name
+  (`db.markPaid(...)`, `this.orders.fulfillOrder(...)`, `db.mark_paid(...)`) while the same call
+  without a receiver (`markPaid(...)`) was counted, so Express handlers were judged differently
+  from Next.js / FastAPI ones. Both forms now count as writes in every framework.
+
 ## [0.1.0] - 2026-11-11
 
 First release.

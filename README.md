@@ -59,7 +59,7 @@ test fixtures in this repository (nothing is hand-edited).
 `webhook-check scan demo-webhooks/web/server/express.ts --brief` (one Express server):
 
 ```text
-webhook-check 0.1.0
+webhook-check 0.1.1
 Scanned demo-webhooks/web/server/express.ts
 1 source file(s), 4 webhook handler(s) (GitHub 1, Razorpay 1, Shopify 1, Stripe 1), 1 Razorpay payment-verification endpoint(s)
 
@@ -159,7 +159,7 @@ A full finding (without `--brief`): the fix is written for the provider (Stripe)
 framework (Next.js App Router: `req.text()`, `constructEventAsync`, `new Response(..., 400)`):
 
 ```text
-webhook-check 0.1.0
+webhook-check 0.1.1
 Scanned demo-webhooks/web/app/api/webhooks/stripe/route.ts
 1 source file(s), 1 webhook handler(s) (Stripe 1)
 
@@ -221,7 +221,7 @@ Exit code: 1
 <summary>The whole demo project: <code>webhook-check scan demo-webhooks --brief</code></summary>
 
 ```text
-webhook-check 0.1.0
+webhook-check 0.1.1
 Scanned demo-webhooks
 9 source file(s), 14 webhook handler(s) (Stripe 4, Razorpay 3, GitHub 2, Clerk/Svix 1, Lemon Squeezy 1, Paddle 1, Shopify 1, Twilio 1), 2 Razorpay payment-verification endpoint(s)
 
@@ -485,7 +485,7 @@ The same handlers written correctly (`tests/fixtures/node_clean`, `tests/fixture
 produce no findings, and every handler is recognised as verified:
 
 ```text
-webhook-check 0.1.0
+webhook-check 0.1.1
 Scanned tests/fixtures/node_clean, tests/fixtures/py_clean
 8 source file(s), 14 webhook handler(s) (Stripe 4, Clerk/Svix 2, GitHub 2, Razorpay 2, Lemon Squeezy 1, Paddle 1, Shopify 1, Twilio 1), 2 Razorpay payment-verification endpoint(s)
 
@@ -504,7 +504,7 @@ Exit code: 0
 | WHK004 | Critical / High | A `whsec_...` (Stripe / Svix) secret in code is Critical. A string literal assigned to a webhook-secret name (`STRIPE_WEBHOOK_SECRET`, `webhookSecret`, `signing_secret`, `RAZORPAY_KEY_SECRET`, `TWILIO_AUTH_TOKEN`, ...), used as the fallback of `process.env.X \|\| "..."` / `os.environ.get("X", "...")`, or passed directly as the secret of a verification call (`constructEvent`, `createHmac`, `hmac.new`, `new Webhook`, `RequestValidator`, ...) is High. Placeholders (`your-secret`, `whsec_...`, `xxxx`) and env-var names are ignored. |
 | WHK005 | High | Verification inside `try` whose `catch` / `except` neither returns nor throws (and especially one that falls back to the unverified body), or a boolean check used as a bare statement: `validateWebhookSignature(...)`, `timingSafeEqual(...)`, `hmac.compare_digest(...)`. `catch { event = null }` followed by `if (!event) return` is understood. |
 | WHK006 | Critical | A route that reads `razorpay_payment_id` from the request (the Razorpay Checkout callback) and never checks `razorpay_signature`: no `validatePaymentVerification`, `verify_payment_signature`, HMAC, or server-side `payments.fetch`. |
-| WHK007 | Low (heuristic) | A provider webhook handler that writes to a database / grants access but never references an event or delivery id (`event.id`, `X-GitHub-Delivery`, `svix-id`, `X-Razorpay-Event-Id`, `X-Shopify-Webhook-Id`, ...), an idempotency key, an upsert or `on conflict`. |
+| WHK007 | Low (heuristic) | A provider webhook handler that writes to a database / grants access (`db.order.update(...)`, `markPaid(...)` or `db.markPaid(...)`, the same in every framework) but never references an event or delivery id (`event.id`, `X-GitHub-Delivery`, `svix-id`, `X-Razorpay-Event-Id`, `X-Shopify-Webhook-Id`, ...), an idempotency key, an upsert or `on conflict`. |
 | WHK008 | Low | Stripe `constructEvent(..., tolerance)` / `construct_event(..., tolerance=...)` set to `0` / `None` / negative (timestamp check disabled) or above 600 seconds. |
 
 **How handlers are found.** Next.js `export async function POST` in `app/**/route.ts` and
@@ -520,8 +520,11 @@ called from a handler are followed two levels deep.
 
 A route is only treated as a webhook when the provider is clear: a provider header or
 verification call, event types such as `checkout.session.completed` together with the
-provider's SDK, or a path like `/webhooks/stripe`. `POST /api/stripe/checkout` (creating a
-session) is not a webhook and is not reported.
+provider's SDK or the provider's name in the route path, a path like `/webhooks/stripe`, or a
+webhook path (`/api/webhooks`) whose body checks only one provider's event types. None of these
+needs the provider's SDK to be imported: `app/api/webhooks/stripe/route.ts` that reads
+`event.type` from `await req.json()` is found from its path alone. `POST /api/stripe/checkout`
+(creating a session) is not a webhook and is not reported.
 
 | Provider | Signature header | Scheme the fix uses |
 |---|---|---|
@@ -649,7 +652,7 @@ report as an artifact.
 ```json
 {
   "tool": "webhook-check",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "targets": [
     "/abs/path/demo-webhooks"
   ],

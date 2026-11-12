@@ -197,7 +197,9 @@ DEDUPE_RE = re.compile(
     """
 )
 
-# State changes (WHK007). Lines that compute an HMAC / hash are ignored first.
+# State changes (WHK007). Lines that compute an HMAC / hash are ignored first. Verb-named calls
+# (markPaid, grant_access, ...) count both as plain functions and as methods (db.markPaid(...),
+# this.orders.fulfill(...)), so the same code is judged the same way in every framework.
 WRITE_CALL_RE = re.compile(
     r"""(?x)
     (?:(?<![\w$])([A-Za-z_$][\w$]*)\s*\.\s*|\)\s*\.\s*)
@@ -206,7 +208,8 @@ WRITE_CALL_RE = re.compile(
        decrement|bulk_create|add|commit|execute|query|rpc|send_mail|send_email|sendMail|sendEmail|enqueue|
        publish|set|put)\s*\(
   | \.\s*from\s*\(\s*['"]
-  | (?<![\w$.])(?:fulfill|grant|credit|provision|activate|upgrade|downgrade|unlock|deliver|refund|cancel|ship|
+  | (?:(?<![\w$])([A-Za-z_$][\w$]*)\s*\.\s*|(?<![\w$.]))
+    (?:fulfill|grant|credit|provision|activate|upgrade|downgrade|unlock|deliver|refund|cancel|ship|
        mark|record|send|create|save|store|insert|update|handle|process|sync|issue|give|add|delete|remove)
        (?:[A-Z_][\w$]*)?\s*\(
     """
@@ -227,7 +230,7 @@ def has_write(text: str) -> bool:
         if HASH_LINE_RE.search(line):
             continue
         for m in WRITE_CALL_RE.finditer(line):
-            recv = m.group(1)
+            recv = m.group(1) or m.group(2)
             if recv and recv in WRITE_IGNORE_RECEIVERS:
                 continue
             name = re.match(r"(?:[\w$]+\s*\.\s*|\)\s*\.\s*)?([\w$]+)", m.group(0).lstrip(".( \t"))
@@ -259,7 +262,9 @@ def identify(context: str, label: str, file_text: str, *, explicit_route: bool) 
     if best is not None:
         return best, "strong"
     for p in PROVIDERS:
-        if p.events is not None and p.events.search(context) and p.sdk.search(file_text):
+        # event types plus the provider's SDK in the file, or its name in the route path / function name
+        # (a handler that reads event.type without importing the SDK)
+        if p.events is not None and p.events.search(context) and (p.sdk.search(file_text) or p.path.search(label)):
             return p, "events"
     if not explicit_route:
         return None, ""
@@ -270,4 +275,8 @@ def identify(context: str, label: str, file_text: str, *, explicit_route: bool) 
         mentioned = [p for p in PROVIDERS if p.sdk.search(file_text)]
         if len(mentioned) == 1:
             return mentioned[0], "path"
+        # /api/webhooks with only one provider's event types in the body (no SDK, no provider name)
+        by_events = [p for p in PROVIDERS if p.events is not None and p.events.search(context)]
+        if not mentioned and len(by_events) == 1:
+            return by_events[0], "events"
     return None, ""

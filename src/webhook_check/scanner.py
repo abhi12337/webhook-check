@@ -60,7 +60,7 @@ def scan_file(path: Path, rel: str, res: ScanResult, max_bytes: int) -> None:
     if text is None:
         return
     res.files_scanned += 1
-    if not is_relevant(text):
+    if not is_relevant(text, rel):
         return
     findings, handlers = (scan_python if suffix in PY_EXT else scan_js)(rel, text)
     lines = text.splitlines()

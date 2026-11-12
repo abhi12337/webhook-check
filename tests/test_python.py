@@ -227,3 +227,13 @@ def test_django_meta_headers():
     good = src.replace('    event = json.loads(request.body)\n',
                        '    event = stripe.Webhook.construct_event(request.body, sig, SECRET)\n')
     assert "WHK001" not in rules(py(good, "shop/views.py")[0])
+
+
+@pytest.mark.parametrize("call", ["db.mark_paid(event['data']['object']['id'])", "mark_paid(event['data'])",
+                                  "orders.grant_access(event['data'])"])
+def test_whk007_method_and_function_calls_count_as_writes(call):
+    src = ('import stripe\nfrom fastapi import FastAPI, Request\napp = FastAPI()\n@app.post("/webhooks/stripe")\n'
+           'async def hook(request: Request):\n    payload = await request.body()\n'
+           '    event = stripe.Webhook.construct_event(payload, request.headers["stripe-signature"], SECRET)\n'
+           f'    if event["type"] == "checkout.session.completed":\n        {call}\n    return {{}}\n')
+    assert rules(py(src)[0]) == ["WHK007"]
