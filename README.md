@@ -677,6 +677,7 @@ report as an artifact.
       "signature_verified": false
     }
   ],
+  "skipped": [],
   "exit_code": 1,
   "summary": {
     "critical": 8,
