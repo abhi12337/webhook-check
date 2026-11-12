@@ -30,6 +30,7 @@ code, never imports it and makes no network requests. CI-friendly exit codes.
 ## Quick start
 
 ```bash
+pipx install git+https://github.com/abhi12337/webhook-check   # straight from GitHub
 pipx install .                            # from a clone of this repo (or: pip install .)
 
 webhook-check scan                        # current folder
